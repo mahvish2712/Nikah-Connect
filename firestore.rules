@@ -1,0 +1,215 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- 1. Global Helpers (The Primitives) ---
+    function isSignedIn() { return request.auth != null; }
+    
+    // Auth tokens NEVER contain custom claims. We lookup the admins collection.
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.email in ["27mahvishsid@gmail.com", "nikaahconnect@gmail.com", "mohdjaved52677@gmail.com", "javeddd@student.iul.ac.in"] ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      ); 
+    }
+
+    function isVerified() { 
+      return isSignedIn() && (request.auth.token.email_verified == true || isAdmin()); 
+    }
+    function isOwner(userId) { return isSignedIn() && (request.auth.uid == userId || isAdmin()); }
+    function isValidId(id) { return id is string; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // 0. Global Admin Bypass
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+    
+    // --- 2. Entity Validation Helpers (The Blueprints) ---
+
+    function isValidUserPrivate(data) {
+      return data.keys().hasAll(['uid', 'email'])
+        && (isAdmin() || data.uid == request.auth.uid)
+        && data.email is string
+        && (data.get('createdAt', request.time) is timestamp);
+    }
+
+    function isValidPublicProfile(data) {
+      return data.keys().hasAll(['uid', 'name', 'profileComplete'])
+        && (isAdmin() || data.uid == request.auth.uid)
+        && data.name is string
+        && data.profileComplete is bool
+        && (data.get('subscriptionStatus', 'free') in ['free', 'premium'])
+        && (data.get('updatedAt', request.time) is timestamp);
+    }
+
+    function isValidMatch(data) {
+      return data.keys().hasAll(['ids', 'status'])
+        && data.ids is list
+        && (isAdmin() || request.auth.uid in data.ids)
+        && data.status in ['pending', 'accepted', 'rejected']
+        && (data.get('updatedAt', request.time) is timestamp);
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['matchId', 'senderId', 'receiverId', 'type', 'timestamp'])
+        && (isAdmin() || data.senderId == request.auth.uid)
+        && data.type in ['text', 'voice']
+        && (data.get('timestamp', request.time) == request.time || isAdmin());
+    }
+
+    function isValidFeedback(data) {
+      return data.keys().hasAll(['name', 'content', 'createdAt'])
+        && data.name is string
+        && data.content is string
+        && (data.createdAt == request.time || isAdmin());
+    }
+
+    function isValidCallLog(data) {
+      return data.keys().hasAll(['matchId', 'callerId', 'receiverId', 'type', 'status', 'createdAt'])
+        && (isAdmin() || data.callerId == request.auth.uid || data.receiverId == request.auth.uid)
+        && data.type in ['audio', 'video']
+        && data.status in ['pending', 'accepted', 'rejected', 'completed', 'missed', 'cancelled']
+        && (data.get('createdAt', request.time) is timestamp || isAdmin());
+    }
+
+    function isValidView(data) {
+      return data.keys().hasAll(['viewerId', 'viewedId', 'createdAt'])
+        && (isAdmin() || data.viewerId == request.auth.uid)
+        && (data.createdAt == request.time || isAdmin());
+    }
+
+    function isValidQuery(data) {
+      return data.keys().hasAll(['name', 'email', 'message', 'createdAt'])
+        && data.name is string && data.name.size() <= 100
+        && data.email is string && data.email.size() <= 100
+        && data.message is string && data.message.size() <= 5000
+        && (data.get('subject', '') is string)
+        && (data.createdAt == request.time || isAdmin());
+    }
+
+    // --- 3. Match Blocks (The Fortress) ---
+
+    // 3.1. User Private Data
+    match /users_private/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUserPrivate(incoming());
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUserPrivate(incoming())
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'updatedAt']);
+    }
+
+    // 3.2. Public Profiles
+    match /profiles/{userId} {
+      // PII Isolation: email is NOT in this collection according to blueprint.
+      // We allow others to see profiles for discovery.
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+
+      allow create: if (isOwner(userId) || isAdmin()) && isValidPublicProfile(incoming())
+                    && incoming().get('createdAt', request.time) == request.time;
+      
+      allow update: if (isOwner(userId) || isAdmin()) && isValidPublicProfile(incoming())
+                    && (
+                      // Action: Profile Edit
+                      incoming().diff(existing()).affectedKeys().hasOnly([
+                        'name', 'age', 'location', 'profession', 'education', 
+                        'bio', 'photoUrl', 'interests', 'gender', 'religion',
+                        'height', 'maritalStatus', 'motherTongue', 'familyType',
+                        'sect', 'religiosity', 'skinTone', 'profileComplete', 
+                        'subscriptionStatus', 'subscriptionId', 'updatedAt'
+                      ])
+                    )
+                    && incoming().uid == existing().uid
+                    && incoming().get('createdAt', existing().createdAt) == existing().createdAt;
+    }
+
+    // 3.3. Matches
+    match /matches/{matchId} {
+      allow get: if isSignedIn() && (request.auth.uid in existing().ids || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ids.hasAny([request.auth.uid]) || isAdmin());
+
+      allow create: if isVerified() && isValidId(matchId) && isValidMatch(incoming())
+                    && incoming().get('createdAt', request.time) == request.time;
+      
+      allow update: if isVerified() && (request.auth.uid in existing().ids || isAdmin()) && isValidMatch(incoming())
+                    && (
+                      // Action: Status Update (Accept/Reject)
+                      incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'theme', 'lastMessageType', 'lastMessageContent', 'lastMessageSenderId', 'isStarred'])
+                    )
+                    && incoming().ids == existing().ids
+                    && incoming().get('createdAt', existing().createdAt) == existing().createdAt;
+      
+      allow delete: if isAdmin() || (isSignedIn() && (request.auth.uid in existing().get('ids', []) || request.auth.uid in existing().ids));
+      
+      // 3.4. Messages Subcollection
+      match /messages/{messageId} {
+        // Enforce relational sync with parent match
+        allow get: if isAdmin() || (isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid || (exists(/databases/$(database)/documents/matches/$(matchId)) && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.get('ids', []))));
+        allow list: if isAdmin() || (isSignedIn() && (exists(/databases/$(database)/documents/matches/$(matchId)) && get(/databases/$(database)/documents/matches/$(matchId)).data.ids.hasAny([request.auth.uid])));
+        
+        allow create: if isVerified() && isValidMessage(incoming())
+                      && (isAdmin() || (exists(/databases/$(database)/documents/matches/$(matchId)) && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.get('ids', [])));
+        
+        allow delete: if isAdmin() || (isSignedIn() && (resource.data.senderId == request.auth.uid || !exists(/databases/$(database)/documents/matches/$(matchId)) || (exists(/databases/$(database)/documents/matches/$(matchId)) && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.get('ids', []))));
+      }
+    }
+
+    // 3.5. Feedback
+    match /feedback/{feedbackId} {
+      allow get, list: if true;
+      allow create: if isVerified() && isValidFeedback(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // 3.6. Call Logs (Real-time Signaling)
+    match /calls/{callId} {
+      allow get: if isSignedIn() && (resource.data.callerId == request.auth.uid || resource.data.receiverId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (
+        request.query.limit <= 10 && 
+        (request.query.filters.receiverId == request.auth.uid || request.query.filters.callerId == request.auth.uid || isAdmin())
+      );
+      allow create: if isSignedIn() && isValidCallLog(incoming())
+                    && (isAdmin() || incoming().callerId == request.auth.uid);
+      allow update: if isSignedIn() && (resource.data.callerId == request.auth.uid || resource.data.receiverId == request.auth.uid || isAdmin())
+                    && (
+                      // Either caller cancels or receiver accepts/rejects/updates offer/answer
+                      (incoming().status in ['accepted', 'rejected', 'cancelled', 'completed']) ||
+                      incoming().keys().hasAny(['offer', 'answer'])
+                    );
+      allow delete: if isAdmin() || (isSignedIn() && (resource.data.callerId == request.auth.uid || resource.data.receiverId == request.auth.uid));
+
+      // ICE Candidates for WebRTC
+      match /iceCandidates/{candidateId} {
+        allow read, write: if isSignedIn() && (
+          get(/databases/$(database)/documents/calls/$(callId)).data.callerId == request.auth.uid || 
+          get(/databases/$(database)/documents/calls/$(callId)).data.receiverId == request.auth.uid ||
+          isAdmin()
+        );
+      }
+    }
+
+    // 3.7. Views
+    match /views/{viewId} {
+      allow get: if isSignedIn() && (resource.data.viewerId == request.auth.uid || resource.data.viewedId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.viewerId == request.auth.uid || resource.data.viewedId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidView(incoming());
+    }
+
+    // 3.8. Queries
+    match /queries/{queryId} {
+      allow create: if isValidQuery(incoming());
+      allow read: if isAdmin();
+    }
+
+    // 3.9. Admins
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Only manageable through Firebase Console or Cloud Functions
+    }
+  }
+}

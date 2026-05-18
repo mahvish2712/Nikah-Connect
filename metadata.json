@@ -1,0 +1,9 @@
+{
+  "name": "NikaahConnect",
+  "description": "A luxury matrimonial platform featuring a dramatic crimson and obsidian aesthetic with gold accents, offering fine-tuned matchmaking, secure communication, and exclusive Premium membership features.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Outfit:wght@100..900&family=Great+Vibes&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", serif;
+  --font-script: "Great Vibes", cursive;
+  
+  --color-brand-primary: #8B1A1A;
+  --color-brand-accent: #D4AF37;
+  --color-brand-gold: #C5A059;
+  --color-brand-cream: #FDFBF7;
+  --color-brand-dark: #2A1D1D;
+}
+
+body {
+  @apply bg-brand-cream text-brand-dark antialiased;
+  font-family: var(--font-sans);
+}
+
+.serif {
+  font-family: var(--font-serif);
+}
+
+.script {
+  font-family: var(--font-script);
+}
+
+.glass {
+  @apply bg-black/5 backdrop-blur-md border border-black/5;
+}
+
+.glass-dark {
+  @apply bg-black/40 backdrop-blur-md border border-white/10;
+}

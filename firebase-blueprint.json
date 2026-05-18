@@ -1,0 +1,156 @@
+{
+  "entities": {
+    "UserPrivate": {
+      "title": "User Private Data",
+      "description": "Sensitive user information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "PublicProfile": {
+      "title": "Public Profile",
+      "description": "Information visible to other users",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "age": { "type": "number" },
+        "location": { "type": "string" },
+        "profession": { "type": "string" },
+        "education": { "type": "string" },
+        "bio": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "interests": { "type": "array", "items": { "type": "string" } },
+        "gender": { "type": "string", "enum": ["male", "female"] },
+        "religion": { "type": "string" },
+        "height": { "type": "string" },
+        "maritalStatus": { "type": "string" },
+        "motherTongue": { "type": "string" },
+        "familyType": { "type": "string" },
+        "sect": { "type": "string" },
+        "religiosity": { "type": "string" },
+        "skinTone": { "type": "string" },
+        "profileComplete": { "type": "boolean" },
+        "subscriptionStatus": { "type": "string", "enum": ["free", "premium"] },
+        "subscriptionId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "profileComplete"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "A match between two users",
+      "type": "object",
+      "properties": {
+        "ids": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message sent between users",
+      "type": "object",
+      "properties": {
+        "matchId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "type": { "type": "string", "enum": ["text", "voice"] },
+        "content": { "type": "string" },
+        "audioData": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "User feedback and testimonials",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "content": { "type": "string" },
+        "rating": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "content", "createdAt"]
+    },
+    "CallLog": {
+      "title": "Call Log",
+      "description": "A log of a voice or video call",
+      "type": "object",
+      "properties": {
+        "matchId": { "type": "string" },
+        "callerId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "type": { "type": "string", "enum": ["audio", "video"] },
+        "status": { "type": "string", "enum": ["completed", "missed", "cancelled"] },
+        "duration": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["matchId", "callerId", "receiverId", "type", "status", "createdAt"]
+    },
+    "View": {
+      "title": "Profile View",
+      "description": "A track of who viewed whose profile",
+      "type": "object",
+      "properties": {
+        "viewerId": { "type": "string" },
+        "viewedId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["viewerId", "viewedId", "createdAt"]
+    },
+    "Query": {
+      "title": "User Query",
+      "description": "User submitted contact form message",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "message", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users_private/{userId}": {
+      "schema": "UserPrivate",
+      "description": "Sensitive user information (email, etc)"
+    },
+    "/profiles/{userId}": {
+      "schema": "PublicProfile",
+      "description": "User public profiles for discovery"
+    },
+    "/matches/{matchId}": {
+      "schema": "Match",
+      "description": "Match documents"
+    },
+    "/matches/{matchId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages within a match"
+    },
+    "/feedback/{feedbackId}": {
+      "schema": "Feedback",
+      "description": "User feedback and testimonials"
+    },
+    "/calls/{callId}": {
+      "schema": "CallLog",
+      "description": "History of calls made between users"
+    },
+    "/views/{viewId}": {
+      "schema": "View",
+      "description": "Profile view tracking"
+    },
+    "/queries/{queryId}": {
+      "schema": "Query",
+      "description": "User submitted queries/contact messages"
+    }
+  }
+}
